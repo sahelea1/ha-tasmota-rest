@@ -1,0 +1,69 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Tasmota REST device",
+        "description": "Enter the IP / hostname of a Tasmota device. The integration will poll it via HTTP and create switch + sensor entities.",
+        "data": {
+          "host": "Host (IP or hostname)",
+          "name": "Friendly name (optional)",
+          "username": "Web admin username (optional)",
+          "password": "Web admin password (optional)",
+          "scan_interval": "Scan interval (seconds)",
+          "use_https": "Use HTTPS",
+          "verify_ssl": "Verify SSL certificate",
+          "virtual_switch_enabled": "Enable power-threshold virtual switch",
+          "virtual_switch_threshold": "Power threshold (Watts)",
+          "virtual_switch_press_entity": "Button entity to press to toggle"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "cannot_connect": "Failed to connect to the device."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tasmota REST options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)",
+          "virtual_switch_enabled": "Enable power-threshold virtual switch",
+          "virtual_switch_threshold": "Power threshold (Watts)",
+          "virtual_switch_press_entity": "Button entity to press to toggle"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": { "name": "State" },
+      "power": { "name": "Power" },
+      "apparent_power": { "name": "Apparent power" },
+      "reactive_power": { "name": "Reactive power" },
+      "current": { "name": "Current" },
+      "voltage": { "name": "Voltage" },
+      "power_factor": { "name": "Power factor" },
+      "energy_today": { "name": "Energy today" },
+      "energy_yesterday": { "name": "Energy yesterday" },
+      "energy_total": { "name": "Energy total" }
+    }
+  },
+  "services": {
+    "set_timer": { "name": "Set timer", "description": "Configure a single Tasmota timer slot." },
+    "disable_all_timers": { "name": "Disable all timers", "description": "Disable all Tasmota timer slots." },
+    "get_timers": { "name": "Get timers", "description": "Fetch the Timers JSON from a device." },
+    "set_timezone": { "name": "Set timezone", "description": "Apply the device timezone configuration." },
+    "send_command": { "name": "Send command", "description": "Send a raw Tasmota command." },
+    "backlog": { "name": "Send Backlog", "description": "Send a Backlog0 sequence of commands." },
+    "restart": { "name": "Restart", "description": "Reboot the device." },
+    "normalize_time": { "name": "Normalize time", "description": "Push HA's local time to the device." },
+    "power_on": { "name": "Power on", "description": "Turn the device relay on." },
+    "power_off": { "name": "Power off", "description": "Turn the device relay off." }
+  }
+}
