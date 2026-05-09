@@ -20,15 +20,38 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_AP_AUTO_PROVISION,
+    CONF_AP_IP,
+    CONF_AP_SSID_PATTERN,
+    CONF_AUTO_ADD_DISCOVERED,
+    CONF_DEFAULT_PASSWORD,
+    CONF_DEFAULT_USERNAME,
     CONF_DEVICES,
+    CONF_HOSTNAME_TEMPLATE,
+    CONF_SCAN_INTERVAL_MIN,
+    CONF_SCAN_SUBNETS,
     CONF_USE_HTTPS,
     CONF_VERIFY_SSL,
     CONF_VIRTUAL_SWITCH_ENABLED,
     CONF_VIRTUAL_SWITCH_PRESS_ENTITY,
     CONF_VIRTUAL_SWITCH_THRESHOLD,
+    CONF_WIFI_PASSWORD,
+    CONF_WIFI_PASSWORD2,
+    CONF_WIFI_SCAN_ENABLED,
+    CONF_WIFI_SSID,
+    CONF_WIFI_SSID2,
+    DATA_DEVICES,
+    DATA_HUB,
+    DEFAULT_AP_IP,
+    DEFAULT_AP_SSID_PATTERN,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SCAN_MINUTES,
     DEFAULT_VIRTUAL_THRESHOLD,
     DOMAIN,
+    ENTRY_TYPE,
+    ENTRY_TYPE_DEVICE,
+    ENTRY_TYPE_HUB,
+    HUB_UNIQUE_ID,
     PLATFORMS,
     SERVICE_BACKLOG,
     SERVICE_DISABLE_ALL_TIMERS,
@@ -36,16 +59,20 @@ from .const import (
     SERVICE_NORMALIZE_TIME,
     SERVICE_POWER_OFF,
     SERVICE_POWER_ON,
+    SERVICE_PROVISION_AP,
+    SERVICE_PROVISION_DEVICE,
     SERVICE_RESTART,
+    SERVICE_SCAN_NOW,
     SERVICE_SEND_COMMAND,
     SERVICE_SET_TIMER,
     SERVICE_SET_TIMEZONE,
 )
 from .coordinator import TasmotaRestCoordinator, TasmotaRestError
+from .discovery import TasmotaDiscoveryHub
 
 _LOGGER = logging.getLogger(__name__)
 
-DEVICE_SCHEMA = vol.Schema(
+DEVICE_YAML_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_NAME): cv.string,
@@ -63,14 +90,14 @@ DEVICE_SCHEMA = vol.Schema(
 CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Schema(
-            {vol.Required(CONF_DEVICES): vol.All(cv.ensure_list, [DEVICE_SCHEMA])}
+            {vol.Required(CONF_DEVICES): vol.All(cv.ensure_list, [DEVICE_YAML_SCHEMA])}
         )
     },
     extra=vol.ALLOW_EXTRA,
 )
 
 
-# ---- Service schemas ----
+# ---------------- Service schemas ----------------
 
 _TARGET_SCHEMA = {
     vol.Optional("device_id"): vol.Any(cv.string, [cv.string]),
@@ -101,26 +128,11 @@ DISABLE_ALL_TIMERS_SCHEMA = vol.Schema(
 
 GET_TIMERS_SCHEMA = vol.Schema({**_TARGET_SCHEMA})
 
-SET_TIMEZONE_SCHEMA = vol.Schema(
-    {
-        **_TARGET_SCHEMA,
-        vol.Optional("command"): cv.string,
-    }
-)
+SET_TIMEZONE_SCHEMA = vol.Schema({**_TARGET_SCHEMA, vol.Optional("command"): cv.string})
 
-SEND_COMMAND_SCHEMA = vol.Schema(
-    {
-        **_TARGET_SCHEMA,
-        vol.Required("command"): cv.string,
-    }
-)
+SEND_COMMAND_SCHEMA = vol.Schema({**_TARGET_SCHEMA, vol.Required("command"): cv.string})
 
-BACKLOG_SCHEMA = vol.Schema(
-    {
-        **_TARGET_SCHEMA,
-        vol.Required("command"): cv.string,
-    }
-)
+BACKLOG_SCHEMA = vol.Schema({**_TARGET_SCHEMA, vol.Required("command"): cv.string})
 
 RESTART_SCHEMA = vol.Schema(
     {
@@ -130,13 +142,38 @@ RESTART_SCHEMA = vol.Schema(
 )
 
 NORMALIZE_TIME_SCHEMA = vol.Schema({**_TARGET_SCHEMA})
-
 POWER_SCHEMA = vol.Schema({**_TARGET_SCHEMA})
+
+PROVISION_AP_SCHEMA = vol.Schema(
+    {
+        vol.Optional("host", default=DEFAULT_AP_IP): cv.string,
+        vol.Optional("ssid"): cv.string,
+        vol.Optional("password"): cv.string,
+        vol.Optional("ssid2"): cv.string,
+        vol.Optional("password2"): cv.string,
+        vol.Optional("hostname"): cv.string,
+    }
+)
+
+PROVISION_DEVICE_SCHEMA = vol.Schema(
+    {
+        **_TARGET_SCHEMA,
+        vol.Optional("ssid"): cv.string,
+        vol.Optional("password"): cv.string,
+        vol.Optional("ssid2"): cv.string,
+        vol.Optional("password2"): cv.string,
+        vol.Optional("hostname"): cv.string,
+    }
+)
+
+SCAN_NOW_SCHEMA = vol.Schema({})
+
+
+# ---------------- Setup ----------------
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration. Imports YAML devices into config entries."""
-    hass.data.setdefault(DOMAIN, {})
+    hass.data.setdefault(DOMAIN, {DATA_HUB: None, DATA_DEVICES: {}})
     _async_register_services(hass)
 
     domain_config = config.get(DOMAIN)
@@ -151,41 +188,65 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Tasmota REST from a config entry."""
-    coordinator = TasmotaRestCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    hass.data.setdefault(DOMAIN, {DATA_HUB: None, DATA_DEVICES: {}})
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    if entry.data.get(ENTRY_TYPE) == ENTRY_TYPE_HUB:
+        return await _async_setup_hub(hass, entry)
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-    return True
+    return await _async_setup_device(hass, entry)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    if entry.data.get(ENTRY_TYPE) == ENTRY_TYPE_HUB:
+        hub: TasmotaDiscoveryHub | None = hass.data[DOMAIN].get(DATA_HUB)
+        if hub is not None:
+            await hub.async_stop()
+            hass.data[DOMAIN][DATA_HUB] = None
+        return True
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        hass.data[DOMAIN][DATA_DEVICES].pop(entry.entry_id, None)
     return unload_ok
 
 
-async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload on options change."""
+async def _async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if hass.data[DOMAIN].get(DATA_HUB) is not None:
+        _LOGGER.warning("Multiple Tasmota REST hub entries are not supported")
+        return False
+    hub = TasmotaDiscoveryHub(hass, entry)
+    await hub.async_start()
+    hass.data[DOMAIN][DATA_HUB] = hub
+    entry.async_on_unload(entry.add_update_listener(_async_hub_update_listener))
+    return True
+
+
+async def _async_setup_device(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    coordinator = TasmotaRestCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+    hass.data[DOMAIN][DATA_DEVICES][entry.entry_id] = coordinator
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_device_update_listener))
+    return True
+
+
+async def _async_device_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-# ---- Service registration ----
+async def _async_hub_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+# ---------------- Service registration ----------------
+
 
 @callback
 def _async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_SET_TIMER):
         return
 
-    def _resolve_coordinators(call: ServiceCall) -> list[TasmotaRestCoordinator]:
-        coords: list[TasmotaRestCoordinator] = []
-        seen: set[str] = set()
-
+    def _devices_for_target(call: ServiceCall) -> list[TasmotaRestCoordinator]:
         device_ids = call.data.get("device_id") or []
         if isinstance(device_ids, str):
             device_ids = [device_ids]
@@ -194,17 +255,17 @@ def _async_register_services(hass: HomeAssistant) -> None:
         if isinstance(entity_ids, str):
             entity_ids = [entity_ids]
 
-        device_registry = dr.async_get(hass)
-        entity_registry = None
-
         if entity_ids:
             from homeassistant.helpers import entity_registry as er
-            entity_registry = er.async_get(hass)
-            for entity_id in entity_ids:
-                ent = entity_registry.async_get(entity_id)
+            registry = er.async_get(hass)
+            for ent_id in entity_ids:
+                ent = registry.async_get(ent_id)
                 if ent and ent.device_id and ent.device_id not in device_ids:
                     device_ids = list(device_ids) + [ent.device_id]
 
+        coords: list[TasmotaRestCoordinator] = []
+        seen: set[str] = set()
+        device_registry = dr.async_get(hass)
         for device_id in device_ids:
             device = device_registry.async_get(device_id)
             if not device:
@@ -212,20 +273,29 @@ def _async_register_services(hass: HomeAssistant) -> None:
             for entry_id in device.config_entries:
                 if entry_id in seen:
                     continue
-                coord = hass.data.get(DOMAIN, {}).get(entry_id)
+                coord = hass.data.get(DOMAIN, {}).get(DATA_DEVICES, {}).get(entry_id)
                 if coord is not None:
                     seen.add(entry_id)
                     coords.append(coord)
         return coords
 
-    def _require_coordinators(call: ServiceCall) -> list[TasmotaRestCoordinator]:
-        coords = _resolve_coordinators(call)
+    def _require_devices(call: ServiceCall) -> list[TasmotaRestCoordinator]:
+        coords = _devices_for_target(call)
         if not coords:
             raise ServiceValidationError(
                 "No Tasmota REST devices selected. Use the target picker to "
                 "select one or more Tasmota REST devices."
             )
         return coords
+
+    def _require_hub() -> TasmotaDiscoveryHub:
+        hub = hass.data.get(DOMAIN, {}).get(DATA_HUB)
+        if hub is None:
+            raise ServiceValidationError(
+                "Auto-discovery hub is not configured. Add the integration "
+                "and choose 'Configure auto-discovery & provisioning' first."
+            )
+        return hub
 
     async def _run_all(coords, awaitable_factory):
         errors: list[str] = []
@@ -237,8 +307,10 @@ def _async_register_services(hass: HomeAssistant) -> None:
         if errors:
             raise HomeAssistantError("; ".join(errors))
 
+    # ----- Per-device services -----
+
     async def handle_set_timer(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         timer_number: int = call.data["timer_number"]
         payload: dict[str, Any] = {"Enable": 1 if call.data.get("enable", True) else 0}
         if "time" in call.data:
@@ -251,12 +323,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         await _run_all(coords, lambda c: c.async_set_timer(timer_number, payload))
 
     async def handle_disable_all_timers(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         count = int(call.data.get("count", 6))
         await _run_all(coords, lambda c: c.async_disable_all_timers(count))
 
     async def handle_get_timers(call: ServiceCall) -> dict[str, Any]:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         results: dict[str, Any] = {}
         for coord in coords:
             try:
@@ -266,12 +338,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         return {"devices": results}
 
     async def handle_set_timezone(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         cmd = call.data.get("command")
         await _run_all(coords, lambda c: c.async_set_timezone(cmd))
 
     async def handle_send_command(call: ServiceCall) -> dict[str, Any]:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         command: str = call.data["command"]
         results: dict[str, Any] = {}
         for coord in coords:
@@ -282,62 +354,108 @@ def _async_register_services(hass: HomeAssistant) -> None:
         return {"devices": results}
 
     async def handle_backlog(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
-        command: str = call.data["command"]
-        await _run_all(coords, lambda c: c.async_backlog(command))
+        coords = _require_devices(call)
+        await _run_all(coords, lambda c: c.async_backlog(call.data["command"]))
 
     async def handle_restart(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         restart_type = int(call.data.get("type", 1))
         await _run_all(coords, lambda c: c.async_restart(restart_type))
 
     async def handle_normalize_time(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         await _run_all(coords, lambda c: c.async_normalize_time())
 
     async def handle_power_on(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         await _run_all(coords, lambda c: c.async_power(True))
 
     async def handle_power_off(call: ServiceCall) -> None:
-        coords = _require_coordinators(call)
+        coords = _require_devices(call)
         await _run_all(coords, lambda c: c.async_power(False))
 
+    # ----- Hub-level services -----
+
+    async def handle_provision_ap(call: ServiceCall) -> dict[str, Any]:
+        hub = _require_hub()
+        ssid = call.data.get("ssid") or hub.entry.data.get(CONF_WIFI_SSID) or hub.entry.options.get(CONF_WIFI_SSID)
+        password = (
+            call.data.get("password")
+            or hub.entry.data.get(CONF_WIFI_PASSWORD)
+            or hub.entry.options.get(CONF_WIFI_PASSWORD)
+        )
+        if not ssid:
+            raise ServiceValidationError("No SSID provided and none stored in hub configuration.")
+        try:
+            response = await hub.async_provision(
+                host=call.data.get("host", DEFAULT_AP_IP),
+                ssid=ssid,
+                password=password,
+                ssid2=call.data.get("ssid2") or hub.entry.options.get(CONF_WIFI_SSID2) or hub.entry.data.get(CONF_WIFI_SSID2),
+                password2=call.data.get("password2") or hub.entry.options.get(CONF_WIFI_PASSWORD2) or hub.entry.data.get(CONF_WIFI_PASSWORD2),
+                hostname=call.data.get("hostname"),
+            )
+        except RuntimeError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {"response": response}
+
+    async def handle_provision_device(call: ServiceCall) -> dict[str, Any]:
+        hub = _require_hub()
+        coords = _require_devices(call)
+        results: dict[str, Any] = {}
+        ssid = call.data.get("ssid") or hub.entry.data.get(CONF_WIFI_SSID) or hub.entry.options.get(CONF_WIFI_SSID)
+        password = (
+            call.data.get("password")
+            or hub.entry.data.get(CONF_WIFI_PASSWORD)
+            or hub.entry.options.get(CONF_WIFI_PASSWORD)
+        )
+        if not ssid:
+            raise ServiceValidationError("No SSID provided and none stored in hub configuration.")
+        for coord in coords:
+            try:
+                results[coord.host] = await hub.async_provision(
+                    host=coord.host,
+                    ssid=ssid,
+                    password=password,
+                    ssid2=call.data.get("ssid2"),
+                    password2=call.data.get("password2"),
+                    hostname=call.data.get("hostname"),
+                )
+            except (RuntimeError, TasmotaRestError) as err:
+                results[coord.host] = {"error": str(err)}
+        return {"devices": results}
+
+    async def handle_scan_now(_call: ServiceCall) -> dict[str, Any]:
+        hub = _require_hub()
+        lan_count = await hub.async_scan_lan()
+        provisioned = False
+        if hub.entry.options.get(CONF_AP_AUTO_PROVISION, hub.entry.data.get(CONF_AP_AUTO_PROVISION, True)):
+            provisioned = await hub.async_try_provision_ap()
+        aps = []
+        if hub.entry.options.get(CONF_WIFI_SCAN_ENABLED, hub.entry.data.get(CONF_WIFI_SCAN_ENABLED, True)):
+            aps = await hub.async_scan_wifi_environment()
+        return {"lan_hits": lan_count, "ap_provisioned": provisioned, "wifi_aps": aps}
+
+    hass.services.async_register(DOMAIN, SERVICE_SET_TIMER, handle_set_timer, schema=SET_TIMER_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_DISABLE_ALL_TIMERS, handle_disable_all_timers, schema=DISABLE_ALL_TIMERS_SCHEMA)
     hass.services.async_register(
-        DOMAIN, SERVICE_SET_TIMER, handle_set_timer, schema=SET_TIMER_SCHEMA
+        DOMAIN, SERVICE_GET_TIMERS, handle_get_timers, schema=GET_TIMERS_SCHEMA, supports_response="optional"
+    )
+    hass.services.async_register(DOMAIN, SERVICE_SET_TIMEZONE, handle_set_timezone, schema=SET_TIMEZONE_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEND_COMMAND, handle_send_command, schema=SEND_COMMAND_SCHEMA, supports_response="optional"
+    )
+    hass.services.async_register(DOMAIN, SERVICE_BACKLOG, handle_backlog, schema=BACKLOG_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_RESTART, handle_restart, schema=RESTART_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_NORMALIZE_TIME, handle_normalize_time, schema=NORMALIZE_TIME_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_POWER_ON, handle_power_on, schema=POWER_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_POWER_OFF, handle_power_off, schema=POWER_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_PROVISION_AP, handle_provision_ap, schema=PROVISION_AP_SCHEMA, supports_response="optional"
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_DISABLE_ALL_TIMERS, handle_disable_all_timers, schema=DISABLE_ALL_TIMERS_SCHEMA
+        DOMAIN, SERVICE_PROVISION_DEVICE, handle_provision_device, schema=PROVISION_DEVICE_SCHEMA, supports_response="optional"
     )
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_GET_TIMERS,
-        handle_get_timers,
-        schema=GET_TIMERS_SCHEMA,
-        supports_response="optional",
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_TIMEZONE, handle_set_timezone, schema=SET_TIMEZONE_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_COMMAND,
-        handle_send_command,
-        schema=SEND_COMMAND_SCHEMA,
-        supports_response="optional",
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_BACKLOG, handle_backlog, schema=BACKLOG_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_RESTART, handle_restart, schema=RESTART_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_NORMALIZE_TIME, handle_normalize_time, schema=NORMALIZE_TIME_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_POWER_ON, handle_power_on, schema=POWER_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_POWER_OFF, handle_power_off, schema=POWER_SCHEMA
+        DOMAIN, SERVICE_SCAN_NOW, handle_scan_now, schema=SCAN_NOW_SCHEMA, supports_response="optional"
     )

@@ -1,8 +1,6 @@
 set_timer:
   name: Set Timer
-  description: >-
-    Configure a single Tasmota timer (1-16) on the targeted device(s).
-    Sends a Timer<n> JSON command via HTTP.
+  description: Configure a single Tasmota timer (1-16) on the targeted device(s).
   target:
     device:
       integration: tasmota_rest
@@ -72,7 +70,7 @@ set_timer:
 
 disable_all_timers:
   name: Disable all timers
-  description: Disable all Tasmota timers (1..count) in a single Backlog.
+  description: Disable Tasmota timers 1..count in a single Backlog.
   target:
     device:
       integration: tasmota_rest
@@ -90,26 +88,21 @@ disable_all_timers:
 get_timers:
   name: Get timers
   description: >-
-    Fetch the Timers JSON from the targeted Tasmota device(s).
-    Use response variables to capture the result.
+    Fetch the Timers JSON. Use response_variable to capture the result.
   target:
     device:
       integration: tasmota_rest
 
 set_timezone:
   name: Set timezone
-  description: >-
-    Apply the timezone configuration to the device. Uses the European DST
-    defaults unless an override Backlog command is supplied.
+  description: Apply timezone configuration. Defaults to Europe/Berlin DST.
   target:
     device:
       integration: tasmota_rest
   fields:
     command:
       name: Custom Backlog command
-      description: >-
-        Optional override; defaults to:
-        Backlog0 Timezone 99; TimeStd 0,0,10,1,3,60; TimeDst 0,0,3,1,2,120
+      description: Optional override Backlog command.
       selector:
         text:
 
@@ -122,7 +115,6 @@ send_command:
   fields:
     command:
       name: Command
-      description: Command sent verbatim to the Tasmota /cm endpoint.
       required: true
       example: "Status 11"
       selector:
@@ -130,16 +122,13 @@ send_command:
 
 backlog:
   name: Send Backlog
-  description: >-
-    Convenience wrapper that sends the supplied semicolon-separated commands
-    via Backlog0 (no inter-command delay).
+  description: Wraps the supplied semicolon-separated commands in Backlog0.
   target:
     device:
       integration: tasmota_rest
   fields:
     command:
       name: Backlog payload
-      description: One or more commands separated by semicolons.
       required: true
       example: "Power On; Delay 10; Power Off"
       selector:
@@ -147,14 +136,14 @@ backlog:
 
 restart:
   name: Restart device
-  description: Reboot the Tasmota device. Restart 1 reboots without changing relay state.
+  description: Reboot the Tasmota. Restart 1 keeps the relay state.
   target:
     device:
       integration: tasmota_rest
   fields:
     type:
       name: Restart type
-      description: 1 = soft restart (default), 99 = halt to bootloader, 2 = factory reset.
+      description: 1 = soft restart, 2 = factory reset, 99 = halt to bootloader.
       default: 1
       selector:
         number:
@@ -164,9 +153,7 @@ restart:
 
 normalize_time:
   name: Normalize time
-  description: >-
-    Push Home Assistant's current local time to the Tasmota device using
-    the Time command. Useful when NTP is unreliable on the device.
+  description: Push HA's current local time to the Tasmota via the Time command.
   target:
     device:
       integration: tasmota_rest
@@ -184,3 +171,74 @@ power_off:
   target:
     device:
       integration: tasmota_rest
+
+provision_ap:
+  name: Provision Tasmota in AP mode
+  description: >-
+    Push WiFi credentials to a Tasmota currently broadcasting its own AP.
+    Defaults to 192.168.4.1 (the Tasmota AP gateway). Stored hub credentials are
+    used for any field left empty.
+  fields:
+    host:
+      name: AP IP / hostname
+      default: "192.168.4.1"
+      selector:
+        text:
+    ssid:
+      name: WiFi SSID
+      description: Override the SSID stored in the hub.
+      selector:
+        text:
+    password:
+      name: WiFi password
+      selector:
+        text:
+          type: password
+    ssid2:
+      name: Secondary SSID
+      selector:
+        text:
+    password2:
+      name: Secondary password
+      selector:
+        text:
+          type: password
+    hostname:
+      name: Hostname
+      description: Optional Tasmota hostname to set.
+      selector:
+        text:
+
+provision_device:
+  name: Push WiFi credentials to existing device
+  description: Send the configured WiFi credentials to the targeted device(s) and reboot.
+  target:
+    device:
+      integration: tasmota_rest
+  fields:
+    ssid:
+      name: WiFi SSID
+      selector:
+        text:
+    password:
+      name: WiFi password
+      selector:
+        text:
+          type: password
+    ssid2:
+      name: Secondary SSID
+      selector:
+        text:
+    password2:
+      name: Secondary password
+      selector:
+        text:
+          type: password
+    hostname:
+      name: Hostname
+      selector:
+        text:
+
+scan_now:
+  name: Scan now
+  description: Trigger an immediate LAN + AP + WiFi-environment scan.

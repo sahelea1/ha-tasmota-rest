@@ -1,0 +1,34 @@
+{
+  "services": {
+    "set_timer": "mdi:timer-cog",
+    "disable_all_timers": "mdi:timer-off",
+    "get_timers": "mdi:timer-search",
+    "set_timezone": "mdi:earth-arrow-right",
+    "send_command": "mdi:console-line",
+    "backlog": "mdi:console-network",
+    "restart": "mdi:restart",
+    "normalize_time": "mdi:clock-check",
+    "power_on": "mdi:power-plug",
+    "power_off": "mdi:power-plug-off",
+    "provision_ap": "mdi:wifi-cog",
+    "provision_device": "mdi:wifi-sync",
+    "scan_now": "mdi:radar"
+  },
+  "entity": {
+    "sensor": {
+      "state": { "default": "mdi:power" },
+      "power": { "default": "mdi:flash" },
+      "apparent_power": { "default": "mdi:flash-outline" },
+      "reactive_power": { "default": "mdi:flash-triangle" },
+      "current": { "default": "mdi:current-ac" },
+      "voltage": { "default": "mdi:sine-wave" },
+      "power_factor": { "default": "mdi:angle-acute" },
+      "energy_today": { "default": "mdi:lightning-bolt" },
+      "energy_yesterday": { "default": "mdi:lightning-bolt-outline" },
+      "energy_total": { "default": "mdi:counter" }
+    },
+    "switch": {
+      "virtual": { "default": "mdi:toggle-switch" }
+    }
+  }
+}

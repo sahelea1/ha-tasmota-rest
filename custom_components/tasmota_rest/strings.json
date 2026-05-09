@@ -1,7 +1,16 @@
 {
   "config": {
+    "flow_title": "{name} ({host})",
     "step": {
       "user": {
+        "title": "Tasmota REST",
+        "description": "Add a single device or configure auto-discovery & provisioning for the whole network.",
+        "menu_options": {
+          "device": "Add a device",
+          "hub": "Configure auto-discovery & provisioning"
+        }
+      },
+      "device": {
         "title": "Add Tasmota REST device",
         "description": "Enter the IP / hostname of a Tasmota device. The integration will poll it via HTTP and create switch + sensor entities.",
         "data": {
@@ -16,6 +25,30 @@
           "virtual_switch_threshold": "Power threshold (Watts)",
           "virtual_switch_press_entity": "Button entity to press to toggle"
         }
+      },
+      "hub": {
+        "title": "Auto-discovery & provisioning",
+        "description": "Saves the WiFi credentials new Tasmotas should join, and configures how Home Assistant scans the network for devices.",
+        "data": {
+          "wifi_ssid": "WiFi SSID (required)",
+          "wifi_password": "WiFi password",
+          "wifi_ssid2": "Backup WiFi SSID (optional)",
+          "wifi_password2": "Backup WiFi password",
+          "default_username": "Default Tasmota web username",
+          "default_password": "Default Tasmota web password",
+          "scan_subnets": "Subnets to scan (comma-separated, blank = auto)",
+          "scan_interval_minutes": "Scan interval (minutes)",
+          "auto_add_discovered": "Automatically add discovered devices without prompting",
+          "ap_auto_provision": "Auto-provision when a Tasmota AP is reachable",
+          "ap_ip": "Tasmota AP gateway IP",
+          "ap_ssid_pattern": "AP SSID match pattern",
+          "wifi_scan_enabled": "Scan nearby WiFi for Tasmota APs (best-effort)",
+          "hostname_template": "Hostname template (use {mac} for last 6 hex digits)"
+        }
+      },
+      "confirm": {
+        "title": "Tasmota REST device discovered",
+        "description": "A Tasmota device was discovered at **{host}** ({name}). Add it now?"
       }
     },
     "error": {
@@ -24,7 +57,9 @@
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "cannot_connect": "Failed to connect to the device."
+      "cannot_connect": "Failed to connect to the device.",
+      "unknown": "Unexpected error.",
+      "single_instance_allowed": "Only one Tasmota REST hub may exist."
     }
   },
   "options": {
@@ -35,7 +70,21 @@
           "scan_interval": "Scan interval (seconds)",
           "virtual_switch_enabled": "Enable power-threshold virtual switch",
           "virtual_switch_threshold": "Power threshold (Watts)",
-          "virtual_switch_press_entity": "Button entity to press to toggle"
+          "virtual_switch_press_entity": "Button entity to press to toggle",
+          "wifi_ssid": "WiFi SSID",
+          "wifi_password": "WiFi password",
+          "wifi_ssid2": "Backup WiFi SSID",
+          "wifi_password2": "Backup WiFi password",
+          "default_username": "Default Tasmota web username",
+          "default_password": "Default Tasmota web password",
+          "scan_subnets": "Subnets to scan (comma-separated, blank = auto)",
+          "scan_interval_minutes": "Scan interval (minutes)",
+          "auto_add_discovered": "Automatically add discovered devices",
+          "ap_auto_provision": "Auto-provision when a Tasmota AP is reachable",
+          "ap_ip": "Tasmota AP gateway IP",
+          "ap_ssid_pattern": "AP SSID match pattern",
+          "wifi_scan_enabled": "Scan nearby WiFi for Tasmota APs",
+          "hostname_template": "Hostname template"
         }
       }
     }
@@ -64,6 +113,9 @@
     "restart": { "name": "Restart", "description": "Reboot the device." },
     "normalize_time": { "name": "Normalize time", "description": "Push HA's local time to the device." },
     "power_on": { "name": "Power on", "description": "Turn the device relay on." },
-    "power_off": { "name": "Power off", "description": "Turn the device relay off." }
+    "power_off": { "name": "Power off", "description": "Turn the device relay off." },
+    "provision_ap": { "name": "Provision AP", "description": "Push WiFi credentials to a Tasmota in AP mode." },
+    "provision_device": { "name": "Re-provision device", "description": "Push WiFi credentials to existing devices and reboot." },
+    "scan_now": { "name": "Scan now", "description": "Trigger an immediate LAN + AP + WiFi scan." }
   }
 }

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="55%" stop-color="#0369A1"/>
+      <stop offset="100%" stop-color="#0B1F33"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="56" ry="56" fill="url(#bg)"/>
+  <rect x="6" y="6" width="244" height="244" rx="50" ry="50"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="2"/>
+
+  <!-- WiFi arcs -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-opacity="0.92" filter="url(#glow)">
+    <path d="M 50 138 Q 128 60 206 138" stroke-width="14"/>
+    <path d="M 76 158 Q 128 102 180 158" stroke-width="11" stroke-opacity="0.75"/>
+    <path d="M 100 178 Q 128 148 156 178" stroke-width="9" stroke-opacity="0.55"/>
+  </g>
+
+  <!-- Lightning bolt -->
+  <g filter="url(#glow)">
+    <path d="M 138 96
+             L 102 168
+             L 124 168
+             L 110 212
+             L 168 132
+             L 144 132
+             L 156 96 Z"
+          fill="url(#bolt)"
+          stroke="#FFFFFF"
+          stroke-width="3"
+          stroke-linejoin="round"/>
+  </g>
+
+  <!-- Base dot (the device) -->
+  <circle cx="128" cy="218" r="8" fill="#FFFFFF" opacity="0.95"/>
+</svg>

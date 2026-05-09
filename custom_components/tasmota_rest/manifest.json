@@ -1,13 +1,42 @@
 {
   "domain": "tasmota_rest",
   "name": "Tasmota REST",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "documentation": "https://github.com/sahelea1/ha-tasmota-rest",
   "issue_tracker": "https://github.com/sahelea1/ha-tasmota-rest/issues",
   "codeowners": ["@sahelea1"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["network"],
   "requirements": [],
   "iot_class": "local_polling",
-  "integration_type": "device"
+  "integration_type": "hub",
+  "loggers": ["custom_components.tasmota_rest"],
+  "dhcp": [
+    {"hostname": "tasmota*"},
+    {"hostname": "tasmota-*"},
+    {"registered_devices": true},
+    {"macaddress": "5CCF7F*"},
+    {"macaddress": "BCDDC2*"},
+    {"macaddress": "ECFABC*"},
+    {"macaddress": "240AC4*"},
+    {"macaddress": "84F3EB*"},
+    {"macaddress": "DC4F22*"},
+    {"macaddress": "A020A6*"},
+    {"macaddress": "8CAAB5*"},
+    {"macaddress": "246F28*"},
+    {"macaddress": "C45BBE*"},
+    {"macaddress": "98F4AB*"},
+    {"macaddress": "C82B96*"},
+    {"macaddress": "8C4B14*"},
+    {"macaddress": "F4CFA2*"},
+    {"macaddress": "E09806*"},
+    {"macaddress": "D8BFC0*"},
+    {"macaddress": "30C6F7*"},
+    {"macaddress": "30AEA4*"},
+    {"macaddress": "94B97E*"}
+  ],
+  "zeroconf": [
+    {"type": "_tasmota._tcp.local."},
+    {"type": "_http._tcp.local.", "name": "tasmota*"}
+  ]
 }
